@@ -1,0 +1,166 @@
+import gradio as gr
+from datetime import datetime
+from typing import Tuple
+from .library import LibrarySystem
+
+class LibraryInterface:
+    def __init__(self):
+        self.library = LibrarySystem()
+        # Add some sample data
+        self._add_sample_data()
+
+    def _add_sample_data(self):
+        # Add sample books
+        self.library.add_book("The Great Gatsby", "F. Scott Fitzgerald", "978-0743273565")
+        self.library.add_book("To Kill a Mockingbird", "Harper Lee", "978-0446310789")
+        self.library.add_book("1984", "George Orwell", "978-0451524935")
+        
+        # Add sample patrons
+        self.library.add_patron("John Doe", "john@example.com", "123-456-7890")
+        self.library.add_patron("Jane Smith", "jane@example.com", "098-765-4321")
+
+    def add_book(self, title: str, author: str, isbn: str) -> str:
+        if not all([title, author, isbn]):
+            return "Please fill in all fields"
+        book = self.library.add_book(title, author, isbn)
+        return f"Book added successfully! Book ID: {book.id}"
+
+    def add_patron(self, name: str, email: str, phone: str) -> str:
+        if not all([name, email, phone]):
+            return "Please fill in all fields"
+        patron = self.library.add_patron(name, email, phone)
+        return f"Patron added successfully! Patron ID: {patron.id}"
+
+    def borrow_book(self, book_id: str, patron_id: str, loan_days: int) -> str:
+        try:
+            book_id = int(book_id)
+            patron_id = int(patron_id)
+        except ValueError:
+            return "Please enter valid numeric IDs"
+
+        loan = self.library.borrow_book(book_id, patron_id, loan_days)
+        if loan:
+            return f"Book borrowed successfully! Due date: {loan.due_date.strftime('%Y-%m-%d')}"
+        return "Failed to borrow book. Check if book/patron exists and book is available"
+
+    def return_book(self, book_id: str) -> str:
+        try:
+            book_id = int(book_id)
+        except ValueError:
+            return "Please enter a valid numeric book ID"
+
+        success = self.library.return_book(book_id)
+        if success:
+            return "Book returned successfully!"
+        return "Failed to return book. Check if book exists and is borrowed"
+
+    def list_books(self) -> str:
+        if not self.library.books:
+            return "No books in the library"
+        
+        book_list = []
+        for book in self.library.books:
+            status = "Available" if book.available else f"Borrowed by Patron #{book.borrowed_by}"
+            book_list.append(
+                f"ID: {book.id} | {book.title} by {book.author} | ISBN: {book.isbn} | {status}"
+            )
+        return "\n".join(book_list)
+
+    def list_patrons(self) -> str:
+        if not self.library.patrons:
+            return "No patrons registered"
+        
+        patron_list = []
+        for patron in self.library.patrons:
+            patron_list.append(
+                f"ID: {patron.id} | {patron.name} | Email: {patron.email} | Phone: {patron.phone}"
+            )
+        return "\n".join(patron_list)
+
+    def list_overdue(self) -> str:
+        overdue = self.library.get_overdue_loans()
+        if not overdue:
+            return "No overdue books"
+        
+        overdue_list = []
+        for loan in overdue:
+            book = next(b for b in self.library.books if b.id == loan.book_id)
+            patron = next(p for p in self.library.patrons if p.id == loan.patron_id)
+            overdue_list.append(
+                f"Book: {book.title} (ID: {book.id}) | "
+                f"Patron: {patron.name} (ID: {patron.id}) | "
+                f"Due date: {loan.due_date.strftime('%Y-%m-%d')}"
+            )
+        return "\n".join(overdue_list)
+
+def create_interface():
+    interface = LibraryInterface()
+    
+    with gr.Blocks(title="Library Management System") as demo:
+        gr.Markdown("# Library Management System")
+        
+        with gr.Tab("Add Book"):
+            with gr.Row():
+                title = gr.Textbox(label="Title")
+                author = gr.Textbox(label="Author")
+                isbn = gr.Textbox(label="ISBN")
+            add_book_btn = gr.Button("Add Book")
+            add_book_output = gr.Textbox(label="Result")
+            add_book_btn.click(
+                fn=interface.add_book,
+                inputs=[title, author, isbn],
+                outputs=add_book_output
+            )
+
+        with gr.Tab("Add Patron"):
+            with gr.Row():
+                name = gr.Textbox(label="Name")
+                email = gr.Textbox(label="Email")
+                phone = gr.Textbox(label="Phone")
+            add_patron_btn = gr.Button("Add Patron")
+            add_patron_output = gr.Textbox(label="Result")
+            add_patron_btn.click(
+                fn=interface.add_patron,
+                inputs=[name, email, phone],
+                outputs=add_patron_output
+            )
+
+        with gr.Tab("Borrow Book"):
+            with gr.Row():
+                book_id = gr.Textbox(label="Book ID")
+                patron_id = gr.Textbox(label="Patron ID")
+                loan_days = gr.Slider(minimum=1, maximum=30, value=14, label="Loan Days")
+            borrow_btn = gr.Button("Borrow Book")
+            borrow_output = gr.Textbox(label="Result")
+            borrow_btn.click(
+                fn=interface.borrow_book,
+                inputs=[book_id, patron_id, loan_days],
+                outputs=borrow_output
+            )
+
+        with gr.Tab("Return Book"):
+            return_book_id = gr.Textbox(label="Book ID")
+            return_btn = gr.Button("Return Book")
+            return_output = gr.Textbox(label="Result")
+            return_btn.click(
+                fn=interface.return_book,
+                inputs=return_book_id,
+                outputs=return_output
+            )
+
+        with gr.Tab("View Library Status"):
+            with gr.Row():
+                list_books_btn = gr.Button("List Books")
+                list_patrons_btn = gr.Button("List Patrons")
+                list_overdue_btn = gr.Button("List Overdue")
+            status_output = gr.Textbox(label="Library Status", lines=10)
+            
+            list_books_btn.click(fn=interface.list_books, outputs=status_output)
+            list_patrons_btn.click(fn=interface.list_patrons, outputs=status_output)
+            list_overdue_btn.click(fn=interface.list_overdue, outputs=status_output)
+
+    return demo
+
+if __name__ == "__main__":
+    demo = create_interface()
+    demo.launch()
