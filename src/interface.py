@@ -147,6 +147,30 @@ def create_interface():
     Provides tabs for all major library operations.
     """
     interface = LibraryInterface()
+    import requests
+
+    def chat_with_llm(messages, api_url="http://host.docker.internal:1234/v1/chat/completions"):
+        """
+        Send a chat request to the local LLM using OpenAI API format.
+        Args:
+            messages: List of dicts with 'role' and 'content'.
+            api_url: Endpoint for the local LLM.
+        Returns:
+            The assistant's reply as a string.
+        """
+        payload = {
+            "model": "local-llm",  # Model name can be anything for LM Studio
+            "messages": messages,
+            "temperature": 0.7
+        }
+        try:
+            response = requests.post(api_url, json=payload, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            return f"Error: {e}"
+
     with gr.Blocks(title="Library Management System") as demo:
         gr.Markdown("# Library Management System")
 
@@ -209,6 +233,28 @@ def create_interface():
             list_books_btn.click(fn=interface.list_books, outputs=status_output)
             list_patrons_btn.click(fn=interface.list_patrons, outputs=status_output)
             list_overdue_btn.click(fn=interface.list_overdue, outputs=status_output)
+
+        # New Chat with LLM Tab
+        with gr.Tab("Chat with LLM"):
+            chatbot = gr.Chatbot(label="LLM Chat")
+            user_msg = gr.Textbox(label="Your message", lines=2)
+            send_btn = gr.Button("Send")
+
+            def gradio_chat(history, user_input):
+                messages = []
+                for turn in history:
+                    messages.append({"role": "user", "content": turn[0]})
+                    messages.append({"role": "assistant", "content": turn[1]})
+                messages.append({"role": "user", "content": user_input})
+                reply = chat_with_llm(messages)
+                history = history + [[user_input, reply]]
+                return history, ""
+
+            send_btn.click(
+                fn=gradio_chat,
+                inputs=[chatbot, user_msg],
+                outputs=[chatbot, user_msg]
+            )
     return demo
 
 
