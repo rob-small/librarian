@@ -149,9 +149,66 @@ def create_interface():
     interface = LibraryInterface()
     with gr.Blocks(title="Library Management System") as demo:
         gr.Markdown("# Library Management System")
-        # ...existing code...
-        # Tabs for Add Book, Add Patron, Borrow Book, Return Book, and View Library Status
-        # ...existing code...
+
+        with gr.Tab("Add Book"):
+            with gr.Row():
+                title = gr.Textbox(label="Title")
+                author = gr.Textbox(label="Author")
+                isbn = gr.Textbox(label="ISBN")
+            add_book_btn = gr.Button("Add Book")
+            add_book_output = gr.Textbox(label="Result")
+            add_book_btn.click(
+                fn=interface.add_book,
+                inputs=[title, author, isbn],
+                outputs=add_book_output
+            )
+
+        with gr.Tab("Add Patron"):
+            with gr.Row():
+                name = gr.Textbox(label="Name")
+                email = gr.Textbox(label="Email")
+                phone = gr.Textbox(label="Phone")
+            add_patron_btn = gr.Button("Add Patron")
+            add_patron_output = gr.Textbox(label="Result")
+            add_patron_btn.click(
+                fn=interface.add_patron,
+                inputs=[name, email, phone],
+                outputs=add_patron_output
+            )
+
+        with gr.Tab("Borrow Book"):
+            with gr.Row():
+                book_id = gr.Textbox(label="Book ID")
+                patron_id = gr.Textbox(label="Patron ID")
+                loan_days = gr.Slider(minimum=1, maximum=30, value=14, label="Loan Days")
+            borrow_btn = gr.Button("Borrow Book")
+            borrow_output = gr.Textbox(label="Result")
+            borrow_btn.click(
+                fn=interface.borrow_book,
+                inputs=[book_id, patron_id, loan_days],
+                outputs=borrow_output
+            )
+
+        with gr.Tab("Return Book"):
+            return_book_id = gr.Textbox(label="Book ID")
+            return_btn = gr.Button("Return Book")
+            return_output = gr.Textbox(label="Result")
+            return_btn.click(
+                fn=interface.return_book,
+                inputs=return_book_id,
+                outputs=return_output
+            )
+
+        with gr.Tab("View Library Status"):
+            with gr.Row():
+                list_books_btn = gr.Button("List Books")
+                list_patrons_btn = gr.Button("List Patrons")
+                list_overdue_btn = gr.Button("List Overdue")
+            status_output = gr.Textbox(label="Library Status", lines=10)
+
+            list_books_btn.click(fn=interface.list_books, outputs=status_output)
+            list_patrons_btn.click(fn=interface.list_patrons, outputs=status_output)
+            list_overdue_btn.click(fn=interface.list_overdue, outputs=status_output)
     return demo
 
 
