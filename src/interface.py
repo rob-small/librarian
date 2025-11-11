@@ -141,33 +141,43 @@ class LibraryInterface:
         return "\n".join(overdue_list)
 
 
-def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/completions"):
+def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/completions", llm_api_key=None):
     """
     Build and return the Gradio Blocks interface for the Library Management System.
     Provides tabs for all major library operations.
     
     Args:
-        llm_api_url: URL endpoint for the local LLM API (default: http://host.docker.internal:1234/v1/chat/completions)
+        llm_api_url: URL endpoint for the LLM API 
+                     (default: http://host.docker.internal:1234/v1/chat/completions)
+        llm_api_key: API key for authentication with the LLM service (optional).
+                     Used for services like OpenAI, Anthropic, or other hosted LLM providers.
     """
     interface = LibraryInterface()
     import requests
 
-    def chat_with_llm(messages, api_url=llm_api_url):
+    def chat_with_llm(messages, api_url=llm_api_url, api_key=llm_api_key):
         """
-        Send a chat request to the local LLM using OpenAI API format.
+        Send a chat request to an LLM using OpenAI API format.
+        Supports both local LLMs (LM Studio) and hosted services (OpenAI, etc.).
+        
         Args:
             messages: List of dicts with 'role' and 'content'.
-            api_url: Endpoint for the local LLM.
+            api_url: Endpoint for the LLM API.
+            api_key: Optional API key for authentication.
         Returns:
             The assistant's reply as a string.
         """
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        
         payload = {
-            "model": "local-llm",  # Model name can be anything for LM Studio
+            "model": "local-llm",  # Model name can be overridden for hosted services
             "messages": messages,
             "temperature": 0.7
         }
         try:
-            response = requests.post(api_url, json=payload, timeout=30)
+            response = requests.post(api_url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"]
