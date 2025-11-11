@@ -154,33 +154,85 @@ def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/compl
     """
     interface = LibraryInterface()
     import requests
+    from .mcp_server import LibraryMCPServer
+    
+    # Initialize MCP server for library tools
+    mcp_server = LibraryMCPServer(interface.library)
 
     def chat_with_llm(messages, api_url=llm_api_url, api_key=llm_api_key):
         """
-        Send a chat request to an LLM using OpenAI API format.
+        Send a chat request to an LLM using OpenAI API format with MCP tools.
         Supports both local LLMs (LM Studio) and hosted services (OpenAI, etc.).
+        The LLM can use library tools for managing books, patrons, and loans.
         
         Args:
             messages: List of dicts with 'role' and 'content'.
             api_url: Endpoint for the LLM API.
             api_key: Optional API key for authentication.
+        
         Returns:
             The assistant's reply as a string.
         """
+        import json
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         
+        # Detect if this is OpenAI or a local LLM
+        is_openai = "openai.com" in api_url
+        
         payload = {
-            "model": "local-llm",  # Model name can be overridden for hosted services
+            "model": "gpt-3.5-turbo" if is_openai else "local-model",
             "messages": messages,
             "temperature": 0.7
         }
+        
+        # Only add tools for OpenAI (which supports function calling)
+        if is_openai:
+            tools = mcp_server.get_tools()
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        
         try:
             response = requests.post(api_url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
             data = response.json()
-            return data["choices"][0]["message"]["content"]
+            
+            # Check if the response contains tool calls
+            message = data["choices"][0]["message"]
+            
+            # If the model wants to use tools, process them
+            if "tool_calls" in message and message["tool_calls"]:
+                tool_results = []
+                for tool_call in message["tool_calls"]:
+                    tool_name = tool_call["function"]["name"]
+                    tool_input = tool_call["function"]["arguments"]
+                    
+                    # Parse tool arguments if they're JSON strings
+                    if isinstance(tool_input, str):
+                        tool_input = json.loads(tool_input)
+                    
+                    # Execute the tool
+                    result = mcp_server.execute_tool(tool_name, tool_input)
+                    tool_results.append({
+                        "role": "tool",
+                        "content": result,
+                        "tool_call_id": tool_call["id"]
+                    })
+                
+                # Add tool results to messages and get final response
+                messages_with_tools = messages + [message] + tool_results
+                
+                # Make a follow-up request to get the final response
+                payload["messages"] = messages_with_tools
+                response = requests.post(api_url, json=payload, headers=headers, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+            
+            # If no tool calls, return the direct response
+            return message.get("content", "No response from LLM")
+            
         except Exception as e:
             return f"Error: {e}"
 
@@ -249,18 +301,37 @@ def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/compl
 
         # New Chat with LLM Tab
         with gr.Tab("Chat with LLM"):
-            chatbot = gr.Chatbot(label="LLM Chat")
+            chatbot = gr.Chatbot(label="LLM Chat", type="messages")
             user_msg = gr.Textbox(label="Your message", lines=2)
             send_btn = gr.Button("Send")
 
             def gradio_chat(history, user_input):
+                if not user_input.strip():
+                    return history, ""
+                
                 messages = []
-                for turn in history:
-                    messages.append({"role": "user", "content": turn[0]})
-                    messages.append({"role": "assistant", "content": turn[1]})
+                # Convert chat history to message format
+                if history:
+                    for msg in history:
+                        if isinstance(msg, dict):
+                            # Already in message format
+                            messages.append(msg)
+                        else:
+                            # Legacy tuple format (user_text, assistant_text)
+                            messages.append({"role": "user", "content": msg[0]})
+                            if msg[1]:
+                                messages.append({"role": "assistant", "content": msg[1]})
+                
+                # Add new user message
                 messages.append({"role": "user", "content": user_input})
+                
+                # Get response from LLM
                 reply = chat_with_llm(messages)
-                history = history + [[user_input, reply]]
+                
+                # Add to history in new message format
+                history.append({"role": "user", "content": user_input})
+                history.append({"role": "assistant", "content": reply})
+                
                 return history, ""
 
             send_btn.click(

@@ -8,6 +8,8 @@ A simple library management system implemented in Python that helps track books,
 - Register and manage patrons
 - Handle book loans and returns
 - Track overdue books
+- Chat with LLM with integrated library access via MCP tools
+- LLM can directly manage library operations through natural conversation
 - Basic testing suite
 
 ## Project Structure
@@ -142,6 +144,37 @@ services:
     env_file:
       - .env
 ```
+
+## MCP (Model Context Protocol) Integration
+
+The application features an embedded MCP server that exposes library operations as tools to the LLM. This allows the LLM to directly interact with the library system through natural language conversation.
+
+### Available Tools
+
+The LLM has access to the following library tools:
+
+- **add_book**: Add a new book to the library
+- **add_patron**: Register a new patron
+- **borrow_book**: Borrow a book for a patron
+- **return_book**: Return a borrowed book
+- **list_books**: View all books and their availability status
+- **list_patrons**: View all registered patrons
+- **get_overdue_loans**: Check for overdue books
+- **get_book_info**: Get detailed information about a specific book
+- **get_patron_info**: Get detailed information about a specific patron
+
+### Example Chat Interactions
+
+Once the application is running, you can chat with the LLM in the "Chat with LLM" tab and have natural conversations like:
+
+- "Add a book called 'Python Programming' by Guido van Rossum with ISBN 123-456-789"
+- "Show me all books in the library"
+- "Register a new patron named Alice Smith with email alice@example.com and phone 555-1234"
+- "Borrow book 1 for patron 1"
+- "What books are overdue?"
+- "Get info about patron 2"
+
+The LLM will understand your requests and execute the appropriate library operations, then provide you with the results.
 
 ## Running Tests
 
