@@ -141,15 +141,18 @@ class LibraryInterface:
         return "\n".join(overdue_list)
 
 
-def create_interface():
+def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/completions"):
     """
     Build and return the Gradio Blocks interface for the Library Management System.
     Provides tabs for all major library operations.
+    
+    Args:
+        llm_api_url: URL endpoint for the local LLM API (default: http://host.docker.internal:1234/v1/chat/completions)
     """
     interface = LibraryInterface()
     import requests
 
-    def chat_with_llm(messages, api_url="http://host.docker.internal:1234/v1/chat/completions"):
+    def chat_with_llm(messages, api_url=llm_api_url):
         """
         Send a chat request to the local LLM using OpenAI API format.
         Args:

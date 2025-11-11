@@ -30,6 +30,7 @@ library_system/
 - Python 3.8 or higher
 - pytest (for running tests)
 - gradio (for web interface)
+- requests (for LLM API communication)
 
 ## Installation
 
@@ -43,7 +44,7 @@ library_system/
    - Unix/MacOS: `source venv/bin/activate`
 4. Install dependencies:
    ```
-   pip install pytest
+   pip install -r requirements.txt
    ```
 
 ## Running the Application
@@ -57,8 +58,37 @@ This will launch a web interface where you can:
 - Register new patrons
 - Borrow and return books
 - View the status of all books, patrons, and overdue loans
+- Chat with a local LLM (if running)
 
 The interface will be available at http://localhost:7860 by default.
+
+## LLM Chat Integration
+
+The application includes a "Chat with LLM" tab that connects to a local LLM running on your machine using the OpenAI API format (e.g., LM Studio).
+
+### Configuration
+
+The LLM API endpoint can be configured using the `LLM_API_URL` environment variable:
+
+```bash
+# Default (for Docker container)
+export LLM_API_URL="http://host.docker.internal:1234/v1/chat/completions"
+
+# For local development
+export LLM_API_URL="http://127.0.0.1:1234/v1/chat/completions"
+
+python main.py
+```
+
+### Docker Usage
+
+When running in Docker, use the default URL `http://host.docker.internal:1234/v1/chat/completions` which allows the container to reach the host machine's LLM.
+
+To run the application with a custom LLM URL in Docker:
+
+```bash
+docker run -e LLM_API_URL="http://host.docker.internal:1234/v1/chat/completions" -p 7860:7860 librarian
+```
 
 ## Running Tests
 
