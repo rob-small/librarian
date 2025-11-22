@@ -310,7 +310,7 @@ def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/compl
 
         # New Chat with LLM Tab
         with gr.Tab("Chat with LLM"):
-            chatbot = gr.Chatbot(label="LLM Chat", type="messages")
+            chatbot = gr.Chatbot(label="LLM Chat")
             user_msg = gr.Textbox(label="Your message", lines=2)
             send_btn = gr.Button("Send")
 
@@ -328,8 +328,6 @@ def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/compl
                         else:
                             # Legacy tuple format (user_text, assistant_text)
                             messages.append({"role": "user", "content": msg[0]})
-                            if msg[1]:
-                                messages.append({"role": "assistant", "content": msg[1]})
                 
                 # Add new user message
                 messages.append({"role": "user", "content": user_input})
