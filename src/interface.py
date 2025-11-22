@@ -141,7 +141,7 @@ class LibraryInterface:
         return "\n".join(overdue_list)
 
 
-def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/completions", llm_api_key=None):
+def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/completions", llm_api_key=None, llm_model_name=None):
     """
     Build and return the Gradio Blocks interface for the Library Management System.
     Provides tabs for all major library operations.
@@ -151,6 +151,8 @@ def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/compl
                      (default: http://host.docker.internal:1234/v1/chat/completions)
         llm_api_key: API key for authentication with the LLM service (optional).
                      Used for services like OpenAI, Anthropic, or other hosted LLM providers.
+        llm_model_name: Model name to use with the LLM service (optional).
+                        If not provided, defaults to 'gpt-3.5-turbo' for OpenAI or 'local-model' for others.
     """
     interface = LibraryInterface()
     import requests
@@ -165,9 +167,11 @@ def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/compl
         Supports both local LLMs (LM Studio) and hosted services (OpenAI, etc.).
         The LLM can use library tools for managing books, patrons, and loans.
         
+        All OpenAI-compatible endpoints support function calling via the tools parameter.
+        
         Args:
             messages: List of dicts with 'role' and 'content'.
-            api_url: Endpoint for the LLM API.
+            api_url: Endpoint for the LLM API (must be OpenAI-compatible format).
             api_key: Optional API key for authentication.
         
         Returns:
@@ -178,20 +182,25 @@ def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/compl
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         
-        # Detect if this is OpenAI or a local LLM
-        is_openai = "openai.com" in api_url
+        # Determine the model name: use provided parameter, or default based on API endpoint
+        # LM Studio uses "local-model", OpenAI uses "gpt-3.5-turbo" or similar
+        if llm_model_name:
+            model_name = llm_model_name
+        elif "openai.com" in api_url:
+            model_name = "gpt-3.5-turbo"
+        else:
+            model_name = "local-model"
+        
+        # Get tools from MCP server - all OpenAI-compatible endpoints support this
+        tools = mcp_server.get_tools()
         
         payload = {
-            "model": "gpt-3.5-turbo" if is_openai else "local-model",
+            "model": model_name,
             "messages": messages,
-            "temperature": 0.7
+            "temperature": 0.7,
+            "tools": tools,
+            "tool_choice": "auto"
         }
-        
-        # Only add tools for OpenAI (which supports function calling)
-        if is_openai:
-            tools = mcp_server.get_tools()
-            payload["tools"] = tools
-            payload["tool_choice"] = "auto"
         
         try:
             response = requests.post(api_url, json=payload, headers=headers, timeout=30)
