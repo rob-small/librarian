@@ -1,4 +1,3 @@
-
 """
 interface.py
 -------------
@@ -141,18 +140,18 @@ class LibraryInterface:
         return "\n".join(overdue_list)
 
 
-def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/completions", llm_api_key=None, llm_model_name=None):
+def create_interface(llm_api_url=None, llm_api_key=None, llm_model_name=None):
     """
     Build and return the Gradio Blocks interface for the Library Management System.
     Provides tabs for all major library operations.
     
     Args:
-        llm_api_url: URL endpoint for the LLM API 
-                     (default: http://host.docker.internal:1234/v1/chat/completions)
+        llm_api_url: URL endpoint for the LLM API (required).
+                     Set via LLM_API_URL environment variable.
         llm_api_key: API key for authentication with the LLM service (optional).
                      Used for services like OpenAI, Anthropic, or other hosted LLM providers.
         llm_model_name: Model name to use with the LLM service (optional).
-                        If not provided, defaults to 'gpt-3.5-turbo' for OpenAI or 'local-model' for others.
+                        If not provided, auto-detects based on API URL.
     """
     interface = LibraryInterface()
     import requests
@@ -163,11 +162,8 @@ def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/compl
 
     def chat_with_llm(messages, api_url=llm_api_url, api_key=llm_api_key):
         """
-        Send a chat request to an LLM using OpenAI API format with MCP tools.
-        Supports both local LLMs (LM Studio) and hosted services (OpenAI, etc.).
-        The LLM can use library tools for managing books, patrons, and loans.
-        
-        All OpenAI-compatible endpoints support function calling via the tools parameter.
+        Send a chat request to an LLM using OpenAI API format.
+        Supports both local LLMs (LM Studio) and hosted services (OpenAI, NVIDIA, etc.).
         
         Args:
             messages: List of dicts with 'role' and 'content'.
@@ -183,7 +179,6 @@ def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/compl
             headers["Authorization"] = f"Bearer {api_key}"
         
         # Determine the model name: use provided parameter, or default based on API endpoint
-        # LM Studio uses "local-model", OpenAI uses "gpt-3.5-turbo" or similar
         if llm_model_name:
             model_name = llm_model_name
         elif "openai.com" in api_url:
@@ -191,15 +186,104 @@ def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/compl
         else:
             model_name = "local-model"
         
-        # Get tools from MCP server - all OpenAI-compatible endpoints support this
-        tools = mcp_server.get_tools()
+        # Define available tools for the LLM
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_all_books",
+                    "description": "Get all books in the library",
+                    "parameters": {"type": "object", "properties": {}, "required": []}
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_all_patrons",
+                    "description": "Get all patrons in the library",
+                    "parameters": {"type": "object", "properties": {}, "required": []}
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "add_book",
+                    "description": "Add a new book to the library",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string"},
+                            "author": {"type": "string"},
+                            "isbn": {"type": "string"}
+                        },
+                        "required": ["title", "author", "isbn"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "add_patron",
+                    "description": "Add a new patron to the library",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "email": {"type": "string"},
+                            "phone": {"type": "string"}
+                        },
+                        "required": ["name", "email", "phone"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "borrow_book",
+                    "description": "Borrow a book for a patron",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "book_id": {"type": "integer"},
+                            "patron_id": {"type": "integer"},
+                            "loan_days": {"type": "integer", "default": 14}
+                        },
+                        "required": ["book_id", "patron_id"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "return_book",
+                    "description": "Return a borrowed book",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "book_id": {"type": "integer"}
+                        },
+                        "required": ["book_id"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_overdue_loans",
+                    "description": "Get all overdue loans",
+                    "parameters": {"type": "object", "properties": {}, "required": []}
+                }
+            }
+        ]
         
+        # Build payload
         payload = {
             "model": model_name,
             "messages": messages,
-            "temperature": 0.7,
             "tools": tools,
-            "tool_choice": "auto"
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "max_tokens": 1024
         }
         
         try:
@@ -207,41 +291,52 @@ def create_interface(llm_api_url="http://host.docker.internal:1234/v1/chat/compl
             response.raise_for_status()
             data = response.json()
             
-            # Check if the response contains tool calls
-            message = data["choices"][0]["message"]
-            
-            # If the model wants to use tools, process them
-            if "tool_calls" in message and message["tool_calls"]:
-                tool_results = []
-                for tool_call in message["tool_calls"]:
-                    tool_name = tool_call["function"]["name"]
-                    tool_input = tool_call["function"]["arguments"]
-                    
-                    # Parse tool arguments if they're JSON strings
-                    if isinstance(tool_input, str):
-                        tool_input = json.loads(tool_input)
-                    
-                    # Execute the tool
-                    result = mcp_server.execute_tool(tool_name, tool_input)
-                    tool_results.append({
-                        "role": "tool",
-                        "content": result,
-                        "tool_call_id": tool_call["id"]
-                    })
+            # Extract the assistant's response
+            if "choices" in data and len(data["choices"]) > 0:
+                message = data["choices"][0]["message"]
                 
-                # Add tool results to messages and get final response
-                messages_with_tools = messages + [message] + tool_results
+                # Check if there are tool calls to execute
+                if "tool_calls" in message and message["tool_calls"]:
+                    # Add assistant's message to conversation
+                    messages.append(message)
+                    
+                    # Execute each tool call
+                    for tool_call in message["tool_calls"]:
+                        tool_name = tool_call["function"]["name"]
+                        tool_args = json.loads(tool_call["function"]["arguments"])
+                        tool_id = tool_call.get("id", "")
+                        
+                        # Execute the tool
+                        result = mcp_server.execute_tool(tool_name, tool_args)
+                        
+                        # Add tool result to messages in OpenAI format
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_id,
+                            "name": tool_name,
+                            "content": json.dumps(result) if not isinstance(result, str) else result
+                        })
+                    
+                    # Get final response from LLM with tool results
+                    payload_with_results = {
+                        "model": model_name,
+                        "messages": messages,
+                        "tools": tools,
+                        "temperature": 0.7,
+                        "top_p": 0.9,
+                        "max_tokens": 1024
+                    }
+                    response = requests.post(api_url, json=payload_with_results, headers=headers, timeout=30)
+                    response.raise_for_status()
+                    data = response.json()
+                    message = data["choices"][0]["message"]
                 
-                # Make a follow-up request to get the final response
-                payload["messages"] = messages_with_tools
-                response = requests.post(api_url, json=payload, headers=headers, timeout=30)
-                response.raise_for_status()
-                data = response.json()
-                return data["choices"][0]["message"]["content"]
+                return message.get("content", "No response from LLM")
+            else:
+                return "Error: Unexpected response format from LLM"
             
-            # If no tool calls, return the direct response
-            return message.get("content", "No response from LLM")
-            
+        except requests.exceptions.HTTPError as e:
+            return f"HTTP Error: {e.response.status_code} - {e.response.text}"
         except Exception as e:
             return f"Error: {e}"
 
