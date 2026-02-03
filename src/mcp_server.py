@@ -137,7 +137,18 @@ class LibraryMCPServer:
             Result of the tool execution as a string
         """
         try:
-            if tool_name == "add_book":
+            # Handle tool name aliases
+            tool_aliases = {
+                "get_all_books": "list_books",
+                "get_all_patrons": "list_patrons",
+                "get_books": "list_books",
+                "get_patrons": "list_patrons",
+            }
+            
+            # Map aliases to actual tool names
+            actual_tool_name = tool_aliases.get(tool_name, tool_name)
+            
+            if actual_tool_name == "add_book":
                 book = self.library.add_book(
                     tool_input["title"],
                     tool_input["author"],
@@ -145,7 +156,7 @@ class LibraryMCPServer:
                 )
                 return f"Book added successfully! ID: {book.id}, Title: {book.title}"
             
-            elif tool_name == "add_patron":
+            elif actual_tool_name == "add_patron":
                 patron = self.library.add_patron(
                     tool_input["name"],
                     tool_input["email"],
@@ -153,7 +164,7 @@ class LibraryMCPServer:
                 )
                 return f"Patron added successfully! ID: {patron.id}, Name: {patron.name}"
             
-            elif tool_name == "borrow_book":
+            elif actual_tool_name == "borrow_book":
                 days = tool_input.get("days", 14)
                 loan = self.library.borrow_book(
                     tool_input["book_id"],
@@ -164,13 +175,13 @@ class LibraryMCPServer:
                     return f"Book borrowed successfully! Due date: {loan.due_date.strftime('%Y-%m-%d')}"
                 return "Failed to borrow book. Check if book/patron exists and book is available."
             
-            elif tool_name == "return_book":
+            elif actual_tool_name == "return_book":
                 success = self.library.return_book(tool_input["book_id"])
                 if success:
                     return "Book returned successfully!"
                 return "Failed to return book. Check if book exists and is borrowed."
             
-            elif tool_name == "list_books":
+            elif actual_tool_name == "list_books":
                 if not self.library.books:
                     return "No books in the library"
                 book_list = []
@@ -181,7 +192,7 @@ class LibraryMCPServer:
                     )
                 return "\n".join(book_list)
             
-            elif tool_name == "list_patrons":
+            elif actual_tool_name == "list_patrons":
                 if not self.library.patrons:
                     return "No patrons registered"
                 patron_list = []
@@ -191,7 +202,7 @@ class LibraryMCPServer:
                     )
                 return "\n".join(patron_list)
             
-            elif tool_name == "get_overdue_loans":
+            elif actual_tool_name == "get_overdue_loans":
                 overdue = self.library.get_overdue_loans()
                 if not overdue:
                     return "No overdue books"
@@ -206,14 +217,14 @@ class LibraryMCPServer:
                     )
                 return "\n".join(overdue_list)
             
-            elif tool_name == "get_book_info":
+            elif actual_tool_name == "get_book_info":
                 book = next((b for b in self.library.books if b.id == tool_input["book_id"]), None)
                 if not book:
                     return f"Book with ID {tool_input['book_id']} not found"
                 status = "Available" if book.available else f"Borrowed by Patron #{book.borrowed_by}"
                 return f"ID: {book.id} | Title: {book.title} | Author: {book.author} | ISBN: {book.isbn} | Status: {status}"
             
-            elif tool_name == "get_patron_info":
+            elif actual_tool_name == "get_patron_info":
                 patron = next((p for p in self.library.patrons if p.id == tool_input["patron_id"]), None)
                 if not patron:
                     return f"Patron with ID {tool_input['patron_id']} not found"
@@ -222,8 +233,8 @@ class LibraryMCPServer:
                 return f"ID: {patron.id} | Name: {patron.name} | Email: {patron.email} | Phone: {patron.phone} | Active Loans: {active_loans}"
             
             else:
-                return f"Unknown tool: {tool_name}"
+                return f"Unknown tool: {actual_tool_name}"
         
         except Exception as e:
-            return f"Error executing {tool_name}: {str(e)}"
+            return f"Error executing {actual_tool_name}: {str(e)}"
 
