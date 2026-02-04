@@ -6,9 +6,17 @@ Start here based on your needs:
 
 ### 🚀 I Want to Get Started Quickly
 → **[QUICKSTART.md](QUICKSTART.md)** (5 minutes)
-- Run the app in 5 minutes
-- Basic examples
+- Run the app with Docker in 5 minutes
+- Docker setup and configuration
+- Basic chat examples
 - Quick troubleshooting
+
+### 🐳 I Want Docker Instructions
+See the **Docker Setup** section in [QUICKSTART.md](QUICKSTART.md#docker-setup):
+- Building and running with Docker Compose
+- Environment configuration
+- Container management
+- Linking to local LLMs
 
 ### 💬 I Want to Use the Chat Feature
 → **[CHAT_GUIDE.md](CHAT_GUIDE.md)** (15 minutes)
@@ -48,7 +56,7 @@ Start here based on your needs:
 ### 📝 I Want the Original README
 → **[README.md](README.md)**
 - Project description
-- Installation
+- Installation (with Docker options)
 - Basic features
 - Usage examples
 

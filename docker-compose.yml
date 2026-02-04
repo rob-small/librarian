@@ -9,4 +9,7 @@ services:
     environment:
       - PYTHONPATH=/app
       - GRADIO_SERVER_NAME=0.0.0.0
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
     restart: unless-stopped

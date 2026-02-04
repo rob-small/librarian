@@ -6,11 +6,17 @@
 - Docker running
 - LM Studio installed and running with a model loaded (or OpenAI API key)
 
-### 2. Build and Run
+### 2. Build and Run with Docker
 ```bash
 cd /home/dell/mycode/librarian
 bash run_container.sh
 ```
+
+This will:
+- Build the Docker image
+- Start the container
+- Map port 7860 to your local machine
+- Run the application
 
 ### 3. Access the App
 - Open browser: `http://localhost:7860`
@@ -23,6 +29,84 @@ bash run_container.sh
 "Register patron: Alice Smith, alice@email.com, 555-1234"
 "Borrow book 1 for patron 1"
 "What books are overdue?"
+```
+
+## Docker Setup
+
+### Building the Container
+
+The application is containerized for easy deployment. To build and run:
+
+```bash
+# Option 1: Using the provided script
+bash run_container.sh
+
+# Option 2: Using Docker Compose directly
+docker-compose up --build
+
+# Option 3: Building manually
+docker build -t librarian:latest .
+docker run -p 7860:7860 --env-file .env librarian:latest
+```
+
+### Environment Configuration
+
+Create a `.env` file in the project root with your LLM configuration:
+
+```env
+# For Local LM Studio
+LLM_API_URL=http://host.docker.internal:1234/v1/chat/completions
+LLM_MODEL_NAME=local-model
+
+# OR For OpenAI
+LLM_API_URL=https://api.openai.com/v1/chat/completions
+LLM_API_KEY=sk-your-actual-key
+LLM_MODEL_NAME=gpt-3.5-turbo
+```
+
+**Note:** When running in Docker:
+- Use `host.docker.internal:1234` to reach services on your host machine (Mac/Windows)
+- Use `host.docker.internal:1234` for Docker Desktop on any platform
+- Use the actual hostname/IP for Linux systems running Docker directly
+
+### Running the Container
+
+```bash
+# With docker-compose (recommended)
+docker-compose up
+
+# With docker run
+docker run -p 7860:7860 \
+  --env-file .env \
+  -v $(pwd):/app \
+  librarian:latest
+
+# With custom environment variables
+docker run -p 7860:7860 \
+  -e LLM_API_URL=http://host.docker.internal:1234/v1/chat/completions \
+  -e LLM_MODEL_NAME=llama2 \
+  librarian:latest
+```
+
+### Stopping the Container
+
+```bash
+# If using docker-compose
+docker-compose down
+
+# If using docker run
+docker stop <container_id>
+docker rm <container_id>
+```
+
+### View Container Logs
+
+```bash
+# Live logs
+docker-compose logs -f
+
+# Or with docker run
+docker logs <container_id> -f
 ```
 
 ## Using OpenAI Instead of Local LLM

@@ -51,7 +51,21 @@ library_system/
 
 ## Running the Application
 
+### Option 1: Run in Docker (Recommended)
+
+```bash
+# Build and run with Docker Compose
+docker-compose up --build
+
+# Or use the provided script
+bash run_container.sh
 ```
+
+Access the app at http://localhost:7860
+
+### Option 2: Run Locally
+
+```bash
 python main.py
 ```
 
@@ -63,6 +77,15 @@ This will launch a web interface where you can:
 - Chat with a local LLM (if running)
 
 The interface will be available at http://localhost:7860 by default.
+
+### Option 3: Run in Docker with Custom Settings
+
+```bash
+docker run -p 7860:7860 \
+  -e LLM_API_URL=http://host.docker.internal:1234/v1/chat/completions \
+  -e LLM_MODEL_NAME=llama2 \
+  librarian:latest
+```
 
 ## LLM Chat Integration
 
