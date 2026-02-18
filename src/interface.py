@@ -7,6 +7,7 @@ and viewing the library status, all backed by the LibrarySystem class.
 """
 
 import gradio as gr
+import os
 from datetime import datetime
 from typing import Tuple
 from .library import LibrarySystem
@@ -156,9 +157,85 @@ def create_interface(llm_api_url=None, llm_api_key=None, llm_model_name=None):
     interface = LibraryInterface()
     import requests
     from .mcp_server import LibraryMCPServer
+    try:
+        from langsmith import Client as LangSmithClient
+    except ImportError:
+        LangSmithClient = None
     
     # Initialize MCP server for library tools
     mcp_server = LibraryMCPServer(interface.library)
+    langsmith_enabled = os.getenv("LANGSMITH_TRACING", "false").lower() in ("1", "true", "yes", "on")
+    langsmith_project = os.getenv("LANGSMITH_PROJECT", "librarian")
+    langsmith_client = None
+
+    if langsmith_enabled:
+        if LangSmithClient is None:
+            print("Warning: LANGSMITH_TRACING is enabled but langsmith package is not installed.")
+        else:
+            try:
+                langsmith_client = LangSmithClient()
+                print(f"LangSmith tracing enabled (project: {langsmith_project})")
+            except Exception as e:
+                print(f"Warning: Failed to initialize LangSmith client: {e}")
+
+    def extract_token_usage(response_data):
+        """
+        Extract token usage from OpenAI-compatible response payloads.
+        Supports both prompt/completion and input/output naming conventions.
+        """
+        usage = response_data.get("usage", {}) if isinstance(response_data, dict) else {}
+        prompt_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0
+        completion_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0)) or 0
+        total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens) or 0
+        return {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens
+        }
+
+    def merge_usage(current, new_usage):
+        """Merge token usage counters across multiple model calls."""
+        return {
+            "prompt_tokens": current["prompt_tokens"] + new_usage["prompt_tokens"],
+            "completion_tokens": current["completion_tokens"] + new_usage["completion_tokens"],
+            "total_tokens": current["total_tokens"] + new_usage["total_tokens"]
+        }
+
+    def update_langsmith_run(run_id, reply_text=None, error_text=None, token_usage=None, per_call=None):
+        """
+        Finalize a LangSmith run with outputs and token accounting.
+        Uses an LLM-friendly output shape so the UI can render generations.
+        """
+        if run_id is None or langsmith_client is None:
+            return
+
+        outputs = {
+            "token_usage": token_usage or {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            "call_count": len(per_call or []),
+        }
+        if reply_text is not None:
+            outputs["response"] = reply_text
+            outputs["generations"] = [[{
+                "message": {"role": "assistant", "content": reply_text}
+            }]]
+        if error_text is not None:
+            outputs["error"] = error_text
+
+        try:
+            langsmith_client.update_run(
+                run_id=run_id,
+                outputs=outputs,
+                error=error_text,
+                end_time=datetime.utcnow(),
+                extra={
+                    "metadata": {
+                        "token_usage": token_usage or {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                        "per_call_usage": per_call or [],
+                    }
+                },
+            )
+        except Exception as e:
+            print(f"Warning: Failed to update LangSmith run: {e}")
 
     def chat_with_llm(messages, api_url=llm_api_url, api_key=llm_api_key):
         """
@@ -177,6 +254,8 @@ def create_interface(llm_api_url=None, llm_api_key=None, llm_model_name=None):
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
+        token_usage_total = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        per_call_usage = []
         
         # Determine the model name: use provided parameter, or default based on API endpoint
         if llm_model_name:
@@ -285,11 +364,37 @@ def create_interface(llm_api_url=None, llm_api_key=None, llm_model_name=None):
             "top_p": 0.9,
             "max_tokens": 1024
         }
+
+        trace_run_id = None
+        if langsmith_client is not None:
+            try:
+                run = langsmith_client.create_run(
+                    name="library-chat-completion",
+                    run_type="llm",
+                    project_name=langsmith_project,
+                    inputs={
+                        "messages": messages,
+                        "model": model_name,
+                        "api_url": api_url
+                    },
+                    extra={
+                        "metadata": {
+                            "source": "library-management-system",
+                            "tools_enabled": True
+                        }
+                    }
+                )
+                trace_run_id = getattr(run, "id", None) or (run.get("id") if isinstance(run, dict) else None)
+            except Exception as e:
+                print(f"Warning: Failed to create LangSmith run: {e}")
         
         try:
             response = requests.post(api_url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
             data = response.json()
+            usage = extract_token_usage(data)
+            per_call_usage.append(usage)
+            token_usage_total = merge_usage(token_usage_total, usage)
             
             # Extract the assistant's response
             if "choices" in data and len(data["choices"]) > 0:
@@ -329,16 +434,47 @@ def create_interface(llm_api_url=None, llm_api_key=None, llm_model_name=None):
                     response = requests.post(api_url, json=payload_with_results, headers=headers, timeout=30)
                     response.raise_for_status()
                     data = response.json()
+                    usage = extract_token_usage(data)
+                    per_call_usage.append(usage)
+                    token_usage_total = merge_usage(token_usage_total, usage)
                     message = data["choices"][0]["message"]
-                
-                return message.get("content", "No response from LLM")
+
+                reply = message.get("content", "No response from LLM")
+                update_langsmith_run(
+                    run_id=trace_run_id,
+                    reply_text=reply,
+                    token_usage=token_usage_total,
+                    per_call=per_call_usage,
+                )
+                return reply
             else:
-                return "Error: Unexpected response format from LLM"
+                error_msg = "Error: Unexpected response format from LLM"
+                update_langsmith_run(
+                    run_id=trace_run_id,
+                    error_text=error_msg,
+                    token_usage=token_usage_total,
+                    per_call=per_call_usage,
+                )
+                return error_msg
             
         except requests.exceptions.HTTPError as e:
-            return f"HTTP Error: {e.response.status_code} - {e.response.text}"
+            error_msg = f"HTTP Error: {e.response.status_code} - {e.response.text}"
+            update_langsmith_run(
+                run_id=trace_run_id,
+                error_text=error_msg,
+                token_usage=token_usage_total,
+                per_call=per_call_usage,
+            )
+            return error_msg
         except Exception as e:
-            return f"Error: {e}"
+            error_msg = f"Error: {e}"
+            update_langsmith_run(
+                run_id=trace_run_id,
+                error_text=error_msg,
+                token_usage=token_usage_total,
+                per_call=per_call_usage,
+            )
+            return error_msg
 
     with gr.Blocks(title="Library Management System") as demo:
         gr.Markdown("# Library Management System")

@@ -5,3 +5,4 @@ wheel>=0.37.0
 gradio>=6.0.0
 requests>=2.31.0
 mcp>=0.1.0
+langsmith>=0.1.147

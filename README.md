@@ -106,6 +106,16 @@ The LLM API endpoint and authentication key can be configured using environment 
   - Required for hosted services (e.g., OpenAI, Anthropic)
   - The key is passed as a Bearer token in the Authorization header
 
+- `LANGSMITH_TRACING`: Enable LangSmith tracing (`true`/`false`)
+  - Default: `false`
+  - Set to `true` to log chat runs and token usage
+
+- `LANGSMITH_API_KEY`: LangSmith API key (required when tracing is enabled)
+  - Used by the LangSmith SDK for authenticated tracing
+
+- `LANGSMITH_PROJECT`: LangSmith project name
+  - Default: `librarian`
+
 ### Usage Examples
 
 #### Local Development (LM Studio)
@@ -154,6 +164,9 @@ You can also specify these variables in a `.env` file and reference them in `doc
 ```
 LLM_API_URL=http://host.docker.internal:1234/v1/chat/completions
 LLM_API_KEY=
+LANGSMITH_TRACING=false
+LANGSMITH_API_KEY=
+LANGSMITH_PROJECT=librarian
 ```
 
 **`docker-compose.yml`:**
